@@ -5,7 +5,7 @@ Classes and functions for the GroupInfo and EntryInfo blocks of a keepass file
 '''
 
 # This file is part of python-keepass and is Copyright (C) 2012 Brett Viren.
-# 
+#
 # This code is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
 # Free Software Foundation; either version 2, or (at your option) any
@@ -24,7 +24,7 @@ def null_de(): return (lambda buf:None, lambda val:None)
 def shunt_de(): return (lambda buf:buf, lambda val:val)
 
 def ascii_de():
-    return (lambda buf:b2a_hex(buf).replace(b'\0',b''), 
+    return (lambda buf:b2a_hex(buf).replace(b'\0',b''),
             lambda val:a2b_hex(val)+b'\0')
 
 def string_de():
@@ -69,6 +69,18 @@ class InfoBase(object):
         if string: self.decode(string)
         return
 
+    @staticmethod
+    def stringify(data):
+        try: # ascii
+            decoded = str(data)
+        except UnicodeDecodeError:
+            try: # unicode
+                decoded = unicode(data)
+            except UnicodeDecodeError:
+                # this may be binary data (the bin-stream field)
+                decoded = base64.b64encode(data)
+        return decoded
+
     def __str__(self):
         ret = [self.__class__.__name__ + ':']
         for num,form in six.iteritems(self.format):
@@ -76,7 +88,11 @@ class InfoBase(object):
                 value = self.__dict__[form[0]]
             except KeyError:
                 continue
-            ret.append('\t%s %s'%(form[0],value))
+
+            decoded = self.stringify(value)
+            ret.append('\t%s %s'%(form[0], decoded))
+
+        # XXX non-ascii
         return '\n'.join(ret)
 
     def decode(self,string):
@@ -97,13 +113,16 @@ class InfoBase(object):
             try:
                 value = decenc[0](buf)
                 if name in ['group_name',
-                            'title', 
+                            'title',
                             'url',
-                            'username', 
+                            'username',
                             'password',
                             'notes',
                             'binary_desc',
                             'uuid']:
+
+                    print name, value
+                    # XXX non-ascii
                     value = value.decode()
             except struct.error as msg:
                 msg = '%s, typ = %d[%d] -> %s buf = "%s"'%\
@@ -193,15 +212,15 @@ Notes:
     def name(self):
         'Return the group_name'
         return self.group_name
-    
+
     def make_group(self, group_name, pathlen, groupid):
         new_group = GroupInfo()
         new_group.groupid = groupid
         new_group.group_name = group_name
         new_group.imageid = 1
-        new_group.creation_time = datetime.now() 
-        new_group.last_mod_time = datetime.now() 
-        new_group.last_acc_time = datetime.now() 
+        new_group.creation_time = datetime.now()
+        new_group.last_mod_time = datetime.now()
+        new_group.last_acc_time = datetime.now()
         new_group.expiration_time = datetime(2999, 12, 28, 23, 59, 59) # KeePassX 0.4.3 default
         new_group.level = pathlen
         new_group.flags = 0
@@ -251,7 +270,7 @@ Notes:
 
     format = {
         0x0: ('ignored',null_de()),
-        0x1: ('uuid',ascii_de()),        #size = 16 
+        0x1: ('uuid',ascii_de()),        #size = 16
         0x2: ('groupid',int_de()),       #size = 4
         0x3: ('imageid',int_de()),       #why size = 4??
         0x4: ('title',string_de()),      #syze = len+1
@@ -275,7 +294,7 @@ Notes:
     def name(self):
         'Return the title'
         return self.title
-    
+
     def make_entry(self,node,title,username,password,url="",notes="",imageid=1):
         new_entry = EntryInfo()
         new_entry.uuid = uuid.uuid4().hex
